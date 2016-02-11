@@ -137,8 +137,11 @@ class Saferpay
 
         if ($this->isTestAccountId($payCompleteParameter->get('ACCOUNTID'))) {
             $payCompleteParameterData = array_merge($payCompleteParameterData, array('spPassword' => PayInitParameterInterface::SAFERPAYTESTACCOUNT_SPPASSWORD));
-        } elseif ($action != PayCompleteParameterInterface::ACTION_SETTLEMENT && !$spPassword) {
-            throw new NoPasswordGivenException();
+        } else {
+            if (!$spPassword) {
+                throw new NoPasswordGivenException();
+            }
+            $payCompleteParameterData = array_merge($payCompleteParameterData, array('spPassword' => $spPassword));
         }
 
         $response = $this->request($payCompleteParameter->getRequestUrl(), $payCompleteParameterData);

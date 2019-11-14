@@ -2,7 +2,9 @@
 
 namespace Payment\Saferpay;
 
-use Payment\HttpClient\HttpClientInterface;
+use Psr\Http\Client\ClientInterface;
+use Http\Message\MessageFactory;
+
 use Payment\Saferpay\Data\Collection\CollectionItemInterface;
 use Payment\Saferpay\Data\PayCompleteParameter;
 use Payment\Saferpay\Data\PayCompleteParameterInterface;
@@ -10,13 +12,19 @@ use Payment\Saferpay\Data\PayCompleteResponse;
 use Payment\Saferpay\Data\PayConfirmParameter;
 use Payment\Saferpay\Data\PayInitParameterInterface;
 use Payment\Saferpay\Exception\NoPasswordGivenException;
+
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 class Saferpay
 {
     /**
-     * @var HttpClientInterface
+     * @var MessageFactory
+     */
+    protected $messageFactory;
+
+    /**
+     * @var ClientInterface
      */
     protected $httpClient;
 
@@ -25,11 +33,16 @@ class Saferpay
      */
     protected $logger;
 
+    public function __construct(MessageFactory $messageFactory = null)
+    {
+        $this->messageFactory  = $messageFactory;
+    }
+
     /**
-     * @param HttpClientInterface $httpClient
+     * @param ClientInterface $httpClient
      * @return $this
      */
-    public function setHttpClient(HttpClientInterface $httpClient)
+    public function setHttpClient(ClientInterface $httpClient): self
     {
         $this->httpClient = $httpClient;
 
@@ -37,13 +50,13 @@ class Saferpay
     }
 
     /**
-     * @return HttpClientInterface
+     * @return ClientInterface
      * @throws \Exception
      */
-    protected function getHttpClient()
+    protected function getHttpClient(): ClientInterface
     {
-        if (is_null($this->httpClient)) {
-            throw new \Exception('Please define a http client based on the HttpClientInterface!');
+        if ($this->httpClient === null) {
+            throw new \RuntimeException('Please define a http client based on the ClientInterface!');
         }
 
         return $this->httpClient;
@@ -53,7 +66,7 @@ class Saferpay
      * @param LoggerInterface $logger
      * @return $this
      */
-    public function setLogger(LoggerInterface $logger)
+    public function setLogger(LoggerInterface $logger): self
     {
         $this->logger = $logger;
 
@@ -65,7 +78,7 @@ class Saferpay
      */
     protected function getLogger()
     {
-        if (is_null($this->logger)) {
+        if ($this->logger === null) {
             $this->logger = new NullLogger();
         }
 
@@ -73,8 +86,10 @@ class Saferpay
     }
 
     /**
-     * @param  CollectionItemInterface $payInitParameter
+     * @param CollectionItemInterface $payInitParameter
      * @return mixed
+     * @throws \Exception
+     * @throws \Psr\Http\Client\ClientExceptionInterface
      */
     public function createPayInit(CollectionItemInterface $payInitParameter)
     {
@@ -84,12 +99,14 @@ class Saferpay
     /**
      * @param $xml
      * @param $signature
-     * @param  CollectionItemInterface $payConfirmParameter
+     * @param CollectionItemInterface $payConfirmParameter
      * @return CollectionItemInterface
+     * @throws \Exception
+     * @throws \Psr\Http\Client\ClientExceptionInterface
      */
     public function verifyPayConfirm($xml, $signature, CollectionItemInterface $payConfirmParameter = null)
     {
-        if (is_null($payConfirmParameter)) {
+        if ($payConfirmParameter === null) {
             $payConfirmParameter = new PayConfirmParameter();
         }
 
@@ -119,12 +136,12 @@ class Saferpay
         CollectionItemInterface $payCompleteParameter = null,
         CollectionItemInterface $payCompleteResponse = null
     ) {
-        if (is_null($payConfirmParameter->get('ID'))) {
+        if ($payConfirmParameter->get('ID') === null) {
             $this->getLogger()->critical('Saferpay: call confirm before complete!');
             throw new \Exception('Saferpay: call confirm before complete!');
         }
 
-        if (is_null($payCompleteParameter)) {
+        if ($payCompleteParameter === null) {
             $payCompleteParameter = new PayCompleteParameter();
         }
 
@@ -137,13 +154,13 @@ class Saferpay
 
         if ($this->isTestAccountId($payCompleteParameter->get('ACCOUNTID'))) {
             $payCompleteParameterData = array_merge($payCompleteParameterData, array('spPassword' => PayInitParameterInterface::SAFERPAYTESTACCOUNT_SPPASSWORD));
-        } elseif ($action != PayCompleteParameterInterface::ACTION_SETTLEMENT && !$spPassword) {
+        } elseif ($action !== PayCompleteParameterInterface::ACTION_SETTLEMENT && !$spPassword) {
             throw new NoPasswordGivenException();
         }
 
         $response = $this->request($payCompleteParameter->getRequestUrl(), $payCompleteParameterData);
 
-        if (is_null($payCompleteResponse)) {
+        if ($payCompleteResponse === null) {
             $payCompleteResponse = new PayCompleteResponse();
         }
 
@@ -154,9 +171,10 @@ class Saferpay
 
     /**
      * @param $url
-     * @param  array      $data
+     * @param array $data
      * @return mixed
      * @throws \Exception
+     * @throws \Psr\Http\Client\ClientExceptionInterface
      */
     protected function request($url, array $data)
     {
@@ -165,26 +183,28 @@ class Saferpay
         $this->getLogger()->debug($url);
         $this->getLogger()->debug($data);
 
-        $response = $this->getHttpClient()->request(
+        $request = $this->messageFactory->createRequest(
             'POST',
             $url,
-            $data,
-            array('Content-Type' => 'application/x-www-form-urlencoded')
+            ['Content-Type'=> 'application/x-www-form-urlencoded'],
+            $data
         );
 
-        $this->getLogger()->debug($response->getContent());
+        $response = $this->getHttpClient()->sendRequest($request);
 
-        if ($response->getStatusCode() != 200) {
+        $this->getLogger()->debug($response->getBody()->getContents());
+
+        if ($response->getStatusCode() !== 200) {
             $this->getLogger()->critical('Saferpay: request failed with statuscode: {statuscode}!', array('statuscode' => $response->getStatusCode()));
             throw new \Exception('Saferpay: request failed with statuscode: ' . $response->getStatusCode() . '!');
         }
 
-        if (strpos($response->getContent(), 'ERROR') !== false) {
+        if (strpos($response->getBody()->getContents(), 'ERROR') !== false) {
             $this->getLogger()->critical('Saferpay: request failed: {content}!', array('content' => $response->getContent()));
             throw new \Exception('Saferpay: request failed: ' . $response->getContent() . '!');
         }
 
-        return $response->getContent();
+        return $response->getBody()->getContents();
     }
 
     /**
@@ -192,7 +212,7 @@ class Saferpay
      * @param $xml
      * @throws \Exception
      */
-    protected function fillDataFromXML(CollectionItemInterface $data, $xml)
+    protected function fillDataFromXML(CollectionItemInterface $data, $xml): void
     {
         $document = new \DOMDocument();
         $fragment = $document->createDocumentFragment();
@@ -212,10 +232,10 @@ class Saferpay
      * @param  string $accountId
      * @return bool
      */
-    protected function isTestAccountId($accountId)
+    protected function isTestAccountId($accountId): bool
     {
         $prefix = PayInitParameterInterface::TESTACCOUNT_PREFIX;
 
-        return substr($accountId, 0, strlen($prefix)) === $prefix;
+        return strpos($accountId, $prefix) === 0;
     }
 }

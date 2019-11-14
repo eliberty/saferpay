@@ -11,13 +11,16 @@
         }
     ],
     "require": {
-        "php": ">=5.3.3",
+        "php": ">=7.2",
         "psr/log": "1.0.*",
-        "payment/httpclient": "1.0.*",
-        "payment/httpclient-implementation": "~1.0"
+        "psr/http-message": "^1.0",
+        "psr/http-client": "^1.0",
+        "php-http/discovery": "^1.7",
+        "php-http/message": "^1.8",
+        "psr/http-factory": "^1.0",
+        "ext-dom": "*"
     },
     "require-dev": {
-        "payment/httpclient-buzz": "~1.1",
         "phpunit/phpunit": "3.7.*"
     },
     "autoload": {

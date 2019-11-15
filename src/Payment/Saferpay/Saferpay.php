@@ -5,7 +5,6 @@ namespace Payment\Saferpay;
 use Psr\Http\Client\ClientInterface;
 use Http\Message\MessageFactory;
 
-use Payment\HttpClient\HttpClientInterface;
 use Payment\Saferpay\Data\AbstractData;
 use Payment\Saferpay\Data\PayCompleteParameter;
 use Payment\Saferpay\Data\PayCompleteParameterInterface;
@@ -40,10 +39,10 @@ class Saferpay
     }
 
     /**
-     * @param HttpClientInterface $httpClient
+     * @param ClientInterface $httpClient
      * @return $this
      */
-    public function setHttpClient(HttpClientInterface $httpClient)
+    public function setHttpClient(ClientInterface $httpClient)
     {
         $this->httpClient = $httpClient;
 
@@ -51,13 +50,13 @@ class Saferpay
     }
 
     /**
-     * @return HttpClientInterface
+     * @return ClientInterface
      * @throws \Exception
      */
     protected function getHttpClient()
     {
-        if (is_null($this->httpClient)) {
-            throw new \Exception('Please define a http client based on the HttpClientInterface!');
+        if ($this->httpClient === null) {
+            throw new \Exception('Please define a http client based on the ClientInterface!');
         }
 
         return $this->httpClient;
@@ -79,7 +78,7 @@ class Saferpay
      */
     protected function getLogger()
     {
-        if (is_null($this->logger)) {
+        if ($this->logger === null) {
             $this->logger = new NullLogger();
         }
 
@@ -122,7 +121,7 @@ class Saferpay
      */
     public function payCompleteV2(PayConfirmParameter $payConfirmParameter, $action = PayCompleteParameterInterface::ACTION_SETTLEMENT, $spPassword = null)
     {
-        if (is_null($payConfirmParameter->getId())) {
+        if ($payConfirmParameter->getId() === null) {
             $this->getLogger()->critical('Saferpay: call confirm before complete!');
             throw new \Exception('Saferpay: call confirm before complete!');
         }

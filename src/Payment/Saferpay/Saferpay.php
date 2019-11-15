@@ -2,6 +2,9 @@
 
 namespace Payment\Saferpay;
 
+use Psr\Http\Client\ClientInterface;
+use Http\Message\MessageFactory;
+
 use Payment\HttpClient\HttpClientInterface;
 use Payment\Saferpay\Data\AbstractData;
 use Payment\Saferpay\Data\PayCompleteParameter;
@@ -17,7 +20,12 @@ use Psr\Log\NullLogger;
 class Saferpay
 {
     /**
-     * @var HttpClientInterface
+     * @var MessageFactory
+     */
+    protected $messageFactory;
+
+    /**
+     * @var ClientInterface
      */
     protected $httpClient;
 
@@ -25,6 +33,11 @@ class Saferpay
      * @var LoggerInterface
      */
     protected $logger;
+
+    public function __construct(MessageFactory $messageFactory = null)
+    {
+        $this->messageFactory  = $messageFactory;
+    }
 
     /**
      * @param HttpClientInterface $httpClient
@@ -141,9 +154,10 @@ class Saferpay
 
     /**
      * @param $url
-     * @param  array      $data
+     * @param array $data
      * @return mixed
      * @throws \Exception
+     * @throws \Psr\Http\Client\ClientExceptionInterface
      */
     protected function request($url, array $data)
     {
@@ -152,26 +166,28 @@ class Saferpay
         $this->getLogger()->debug($url);
         $this->getLogger()->debug($data);
 
-        $response = $this->getHttpClient()->request(
+        $request = $this->messageFactory->createRequest(
             'POST',
             $url,
-            $data,
-            array('Content-Type' => 'application/x-www-form-urlencoded')
+            ['Content-Type'=> 'application/x-www-form-urlencoded'],
+            $data
         );
 
-        $this->getLogger()->debug($response->getContent());
+        $response = $this->getHttpClient()->sendRequest($request);
 
-        if ($response->getStatusCode() != 200) {
+        $this->getLogger()->debug($response->getBody()->getContents());
+
+        if ($response->getStatusCode() !== 200) {
             $this->getLogger()->critical('Saferpay: request failed with statuscode: {statuscode}!', array('statuscode' => $response->getStatusCode()));
             throw new \Exception('Saferpay: request failed with statuscode: ' . $response->getStatusCode() . '!');
         }
 
-        if (strpos($response->getContent(), 'ERROR') !== false) {
+        if (strpos($response->getBody()->getContents(), 'ERROR') !== false) {
             $this->getLogger()->critical('Saferpay: request failed: {content}!', array('content' => $response->getContent()));
             throw new \Exception('Saferpay: request failed: ' . $response->getContent() . '!');
         }
 
-        return $response->getContent();
+        return $response->getBody()->getContents();
     }
 
     /**

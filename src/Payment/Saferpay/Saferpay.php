@@ -86,8 +86,9 @@ class Saferpay
     }
 
     /**
-     * @param  PayInitParameterWithDataInterface $payInitParameter
+     * @param PayInitParameterWithDataInterface $payInitParameter
      * @return string
+     * @throws \Exception
      */
     public function createPayInit(PayInitParameterWithDataInterface $payInitParameter)
     {
@@ -98,6 +99,7 @@ class Saferpay
      * @param $xml
      * @param $signature
      * @return PayConfirmParameter
+     * @throws \Exception
      */
     public function verifyPayConfirm($xml, $signature)
     {
@@ -174,19 +176,21 @@ class Saferpay
 
         $response = $this->getHttpClient()->sendRequest($request);
 
-        $this->getLogger()->debug($response->getBody()->getContents());
+        $content = $response->getBody()->getContents();
+        $this->getLogger()->debug($content);
 
         if ($response->getStatusCode() !== 200) {
             $this->getLogger()->critical('Saferpay: request failed with statuscode: {statuscode}!', array('statuscode' => $response->getStatusCode()));
             throw new \Exception('Saferpay: request failed with statuscode: ' . $response->getStatusCode() . '!');
         }
 
-        if (strpos($response->getBody()->getContents(), 'ERROR') !== false) {
-            $this->getLogger()->critical('Saferpay: request failed: {content}!', array('content' => $response->getContent()));
-            throw new \Exception('Saferpay: request failed: ' . $response->getContent() . '!');
+        if (strpos($content, 'ERROR') !== false) {
+            $this->getLogger()->critical('Saferpay: request failed: {content}!', array('content' => $content));
+            throw new \Exception('Saferpay: request failed: ' . $content . '!');
         }
 
-        return $response->getBody()->getContents();
+        return $content;
+
     }
 
     /**
